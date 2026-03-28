@@ -1,0 +1,913 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Bowling Pocket Line – 4°/5°/6° Toggles</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Rajdhani:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0d0014;
+    --panel: #160022;
+    --panel2: #1e0030;
+    --lime: #c8ff00;
+    --purple: #9b00ff;
+    --purple-mid: #6d00b3;
+    --purple-light: #cc88ff;
+    --purple-dark: #3a005a;
+    --text: #f0e8ff;
+    --muted: #9b7fbb;
+    --border: #4a0080;
+    --sidebar-width: 360px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    display: flex;
+    height: 100vh;
+    font-family: 'Rajdhani', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    overflow: hidden;
+  }
+
+  /* ── SIDEBAR ── */
+  #sidebar {
+    position: fixed;
+    top: 0; left: 0;
+    width: var(--sidebar-width);
+    height: 100vh;
+    background: var(--panel);
+    border-right: 2px solid var(--border);
+    overflow-y: auto;
+    overflow-x: hidden;
+    z-index: 200;
+    transform: translateX(0);
+    transition: transform 0.35s cubic-bezier(.77,0,.18,1);
+    box-shadow: 4px 0 32px rgba(155,0,255,0.25);
+  }
+  #sidebar.hidden { transform: translateX(calc(-1 * var(--sidebar-width))); }
+  #sidebar-inner { padding: 20px 20px 80px; }
+
+  #panel-toggle {
+    position: fixed;
+    top: 50%;
+    left: var(--sidebar-width);
+    transform: translateY(-50%);
+    z-index: 300;
+    background: var(--purple);
+    border: none;
+    border-radius: 0 10px 10px 0;
+    width: 28px; height: 64px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 4px 0 16px rgba(155,0,255,0.5);
+    transition: left 0.35s cubic-bezier(.77,0,.18,1), background 0.2s;
+    touch-action: manipulation;
+  }
+  #panel-toggle:hover { background: var(--lime); }
+  #panel-toggle.closed { left: 0; }
+  #panel-toggle svg { transition: transform 0.35s; }
+  #panel-toggle.closed svg { transform: rotate(180deg); }
+
+  /* ── VIEWPORT ── */
+  #viewport {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(ellipse at 40% 30%, #1a003a 0%, #0d0014 70%);
+    margin-left: var(--sidebar-width);
+    transition: margin-left 0.35s cubic-bezier(.77,0,.18,1);
+    overflow: hidden;
+    position: relative;
+  }
+  #viewport.expanded { margin-left: 0; }
+
+  /* ── ZOOM CONTAINER ── */
+  #zoomContainer {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transform-origin: center center;
+    will-change: transform;
+  }
+
+  #laneWrap {
+    position: relative;
+    border: 3px solid var(--purple);
+    border-radius: 4px;
+    box-shadow: 0 0 40px rgba(155,0,255,0.5), 0 0 80px rgba(155,0,255,0.2);
+    animation: pulse-glow 4s ease-in-out infinite;
+    flex-shrink: 0;
+  }
+  canvas { display: block; cursor: crosshair; touch-action: none; }
+
+  @keyframes pulse-glow {
+    0%,100% { box-shadow: 0 0 30px rgba(155,0,255,0.4), 0 0 60px rgba(155,0,255,0.15); }
+    50%      { box-shadow: 0 0 50px rgba(155,0,255,0.7), 0 0 90px rgba(200,255,0,0.12); }
+  }
+
+  /* ── ZOOM CONTROLS ── */
+  #zoom-controls {
+    position: fixed;
+    bottom: 20px;
+    right: 16px;
+    z-index: 250;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .zoom-btn {
+    width: 40px; height: 40px;
+    background: rgba(155,0,255,0.85);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--lime);
+    font-size: 22px;
+    line-height: 1;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    touch-action: manipulation;
+    user-select: none;
+    box-shadow: 0 2px 12px rgba(155,0,255,0.5);
+    transition: background 0.15s;
+  }
+  .zoom-btn:active { background: var(--lime); color: #000; }
+
+  /* ── FORM ELEMENTS ── */
+  .section-head {
+    font-family: 'Orbitron', monospace;
+    font-size: .7rem;
+    text-transform: uppercase;
+    letter-spacing: .1em;
+    color: var(--lime);
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 6px;
+    margin: 18px 0 12px;
+  }
+  .row { margin-bottom: 12px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+  label {
+    display: block;
+    font-size: .82rem;
+    font-weight: 600;
+    color: var(--muted);
+    margin-bottom: 4px;
+  }
+  label span.val {
+    float: right;
+    color: var(--lime);
+    font-family: 'Orbitron', monospace;
+    font-size: .78rem;
+  }
+  select {
+    width: 100%;
+    background: var(--panel2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 6px 8px;
+    border-radius: 6px;
+    font-family: 'Rajdhani', sans-serif;
+    font-size: .88rem;
+    outline: none;
+    cursor: pointer;
+  }
+  select:focus { border-color: var(--lime); }
+  input[type=range] {
+    width: 100%;
+    -webkit-appearance: none;
+    height: 4px; border-radius: 4px;
+    background: var(--purple-dark);
+    outline: none; cursor: pointer;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    background: var(--lime);
+    border: 2px solid var(--bg);
+    box-shadow: 0 0 8px rgba(200,255,0,0.6);
+  }
+  label.check-row {
+    display: flex; align-items: center; gap: 8px;
+    margin: 6px 0; font-size: .84rem;
+    color: var(--muted); cursor: pointer;
+  }
+  input[type=checkbox] { accent-color: var(--lime); width:16px; height:16px; }
+
+  .stats {
+    background: rgba(0,0,0,.4);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px; margin-top: 10px;
+  }
+  .stat {
+    display: flex; justify-content: space-between; align-items: center;
+    margin: 7px 0; font-size: .82rem;
+  }
+  .stat span:first-child { color: var(--muted); }
+  .stat span:last-child { color: var(--lime); font-family: 'Orbitron', monospace; font-size: .76rem; }
+
+  .legend {
+    position: absolute; right: 8px; bottom: 8px;
+    font-size: 11px;
+    background: rgba(13,0,20,.88);
+    border: 1px solid var(--border);
+    padding: 7px 10px; border-radius: 8px;
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  .chip { display: flex; align-items: center; gap: 6px; color: var(--text); font-family: 'Rajdhani', sans-serif; font-weight: 600; }
+  .chip i { width:10px; height:10px; border-radius:3px; flex-shrink:0; }
+
+  #drag-hint {
+    position: absolute; top: 10px; left: 50%;
+    transform: translateX(-50%);
+    background: rgba(155,0,255,.75);
+    color: var(--lime);
+    font-family: 'Orbitron', monospace;
+    font-size: .6rem; letter-spacing: .08em;
+    padding: 4px 12px; border-radius: 20px;
+    pointer-events: none; transition: opacity 1s; white-space: nowrap;
+  }
+
+  #sidebar::-webkit-scrollbar { width: 4px; }
+  #sidebar::-webkit-scrollbar-track { background: transparent; }
+  #sidebar::-webkit-scrollbar-thumb { background: var(--purple-dark); border-radius: 4px; }
+
+  /* ── MOBILE ── */
+  @media (max-width: 600px) {
+    :root { --sidebar-width: 100vw; }
+    #sidebar { width: 100vw; }
+    #sidebar.hidden { transform: translateX(-100vw); }
+    #panel-toggle { left: 0; }
+    #panel-toggle.closed { left: 0; }
+    #viewport { margin-left: 0 !important; }
+  }
+</style>
+</head>
+<body>
+
+<div id="sidebar">
+  <div id="sidebar-inner">
+    <div class="section-head" style="margin-top:8px">⬡ Shot Setup</div>
+    <div class="row grid2">
+      <div>
+        <label>Handedness</label>
+        <select id="handedness">
+          <option value="right">Right (1–3)</option>
+          <option value="left">Left (1–2)</option>
+        </select>
+      </div>
+      <div>
+        <label>Lock Entry Angle</label>
+        <select id="lockAngle">
+          <option value="none">None</option>
+          <option value="4">4°</option>
+          <option value="5">5°</option>
+          <option value="6" selected>6°</option>
+        </select>
+      </div>
+    </div>
+    <div class="row grid2">
+      <div>
+        <label>Start Board <span class="val" id="v-start">20</span></label>
+        <input type="range" id="startBoard" min="1" max="39" value="20">
+      </div>
+      <div>
+        <label>Arrow Board <span class="val" id="v-arrow">20</span></label>
+        <input type="range" id="arrowBoard" min="1" max="39" value="20">
+      </div>
+    </div>
+
+    <div class="section-head">⬡ Pattern / Distance</div>
+    <div class="row grid2">
+      <div>
+        <label>Pattern Length (ft) <span class="val" id="v-pl">42</span></label>
+        <input type="range" id="patternLen" min="32" max="47" value="42">
+      </div>
+      <div>
+        <label>Breakpoint Dist (ft) <span class="val" id="v-bd">45</span></label>
+        <input type="range" id="breakDist" min="15" max="62" value="45">
+      </div>
+    </div>
+    <div class="row">
+      <label>Breakpoint Board <span class="val" id="v-bb">7</span></label>
+      <input type="range" id="breakBoard" min="1" max="39" value="7">
+    </div>
+    <div class="row">
+      <label>Distance Model</label>
+      <select id="distanceModel">
+        <option value="EOP_60">End of pattern: (60 − L) ft</option>
+        <option value="EOP_80">Article form: (80 − L) ft</option>
+        <option value="BP">Breakpoint: (BD ↔ 60) ft</option>
+      </select>
+    </div>
+
+    <div class="section-head">⬡ Angle Guides</div>
+    <label class="check-row"><input type="checkbox" id="show4" checked> Show 4° guide</label>
+    <label class="check-row"><input type="checkbox" id="show5" checked> Show 5° guide</label>
+    <label class="check-row"><input type="checkbox" id="show6" checked> Show 6° guide</label>
+    <label class="check-row"><input type="checkbox" id="showXs" checked> Show × markers</label>
+
+    <div class="section-head">⬡ Stats</div>
+    <div class="stats">
+      <div class="stat"><span>Entry Angle (break → pocket)</span><span id="entryDeg">0.0°</span></div>
+      <div class="stat"><span>Δ vs lock angle</span><span id="deltaDeg">—</span></div>
+      <div class="stat"><span>Rule-of-31 (exit board)</span><span id="pl31">—</span></div>
+      <div class="stat"><span>Model boards (4°/5°/6°)</span><span id="modelBoards">—</span></div>
+    </div>
+  </div>
+</div>
+
+<button id="panel-toggle" title="Toggle panel" onclick="togglePanel()">
+  <svg width="12" height="18" viewBox="0 0 12 18" fill="none">
+    <polyline points="10,2 2,9 10,16" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>
+</button>
+
+<div id="viewport">
+  <div id="zoomContainer">
+    <div id="laneWrap">
+      <canvas id="lane"></canvas>
+      <div id="drag-hint">DRAG DOTS · PINCH TO ZOOM</div>
+      <div class="legend">
+        <div class="chip"><i style="background:#c8ff00"></i>Release</div>
+        <div class="chip"><i style="background:#bb44ff"></i>Hook</div>
+        <div class="chip"><i style="background:#ff9900"></i>Entry</div>
+        <div class="chip"><i style="background:#00ffaa"></i>4°</div>
+        <div class="chip"><i style="background:#cc88ff"></i>5°</div>
+        <div class="chip"><i style="background:#ff4466"></i>6°</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Zoom buttons (desktop & mobile) -->
+<div id="zoom-controls">
+  <button class="zoom-btn" id="zoomIn"  title="Zoom in">+</button>
+  <button class="zoom-btn" id="zoomReset" title="Reset zoom" style="font-size:13px;font-family:Orbitron,monospace;">1:1</button>
+  <button class="zoom-btn" id="zoomOut" title="Zoom out">−</button>
+</div>
+
+<script>
+// ════════════════════════════════════════════════════
+// CANVAS & CONSTANTS
+// ════════════════════════════════════════════════════
+const canvas = document.getElementById('lane');
+const ctx    = canvas.getContext('2d');
+
+const BOARDS   = 39;
+const LANE_W   = 420;
+const LANE_H   = 1250;
+
+const FT_FOUL     = 0;
+const FT_DOTS1    = 7;
+const FT_DOTS2    = 8;
+const FT_ARROWS   = 15;
+const FT_HEAD_PIN = 60;
+
+// Pin geometry — real: 12" c-to-c, ~4" visual diameter, lane 42" wide
+const INCH      = LANE_W / 42;
+const PIN_SP    = INCH * 10.5;                          // spacing between pin centres
+const PIN_ROW_H = PIN_SP * Math.sin(Math.PI / 3);    // row-to-row height
+const PIN_R     = INCH * 2;                           // pin radius
+const PIN_DECK_PX = PIN_ROW_H * 3 + PIN_R * 1;
+
+const PADDING_TOP    = 10;
+const PADDING_BOTTOM = 52;
+const PX_PER_FT = (LANE_H - PADDING_TOP - PIN_DECK_PX - PADDING_BOTTOM) / FT_HEAD_PIN;
+
+function ftToY(ft) { return LANE_H - PADDING_BOTTOM - ft * PX_PER_FT; }
+
+const BW = LANE_W / (BOARDS + 1);
+function boardToX(b, hand) { return hand === 'right' ? LANE_W - b * BW : b * BW; }
+function xToBoard(x, hand) { return hand === 'right' ? (LANE_W - x) / BW : x / BW; }
+function clamp(v, lo, hi)  { return Math.max(lo, Math.min(hi, v)); }
+
+canvas.width  = LANE_W;
+canvas.height = LANE_H;
+
+// ── PIN LAYOUT ──
+function pinLayout() {
+  const cx = LANE_W / 2;
+  const y1 = ftToY(FT_HEAD_PIN);
+  const y2 = y1 - PIN_ROW_H, y3 = y1 - PIN_ROW_H*2, y4 = y1 - PIN_ROW_H*3;
+  const s  = PIN_SP;
+  return [
+    {n:1,  x:cx,         y:y1},
+    {n:2,  x:cx-s/2,     y:y2}, {n:3,  x:cx+s/2,     y:y2},
+    {n:4,  x:cx-s,       y:y3}, {n:5,  x:cx,          y:y3}, {n:6,  x:cx+s,       y:y3},
+    {n:7,  x:cx-s*1.5,   y:y4}, {n:8,  x:cx-s/2,      y:y4}, {n:9,  x:cx+s/2,     y:y4}, {n:10, x:cx+s*1.5,   y:y4},
+  ];
+}
+
+const ARROW_BOARDS = [5, 10, 15, 20, 25, 30, 35];
+const angleColors  = { 4:'#00ffaa', 5:'#cc88ff', 6:'#ff4466' };
+
+// ── DRAG STATE ──
+let handles = {
+  start: { board: 20, ft: 2  },
+  arrow: { board: 20, ft: 25 },
+  bp:    { board: 7,  ft: 40 }
+};
+let dragging = null;
+
+// ════════════════════════════════════════════════════
+// ZOOM / PAN STATE
+// ════════════════════════════════════════════════════
+const zoomContainer = document.getElementById('zoomContainer');
+let scale     = 1;
+let panX      = 0;
+let panY      = 0;
+const MIN_SCALE = 0.5;
+const MAX_SCALE = 4;
+
+function applyTransform() {
+  zoomContainer.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
+}
+
+// Clamp pan so lane stays mostly on screen
+function clampPan() {
+  const vw = document.getElementById('viewport').offsetWidth;
+  const vh = window.innerHeight;
+  const lw = LANE_W * scale;
+  const lh = LANE_H * scale;
+  const maxX = Math.max(0, (lw - vw) / 2 + 60);
+  const maxY = Math.max(0, (lh - vh) / 2 + 60);
+  panX = clamp(panX, -maxX, maxX);
+  panY = clamp(panY, -maxY, maxY);
+}
+
+// Zoom button controls
+document.getElementById('zoomIn').addEventListener('click',    () => { scale = clamp(scale * 1.25, MIN_SCALE, MAX_SCALE); clampPan(); applyTransform(); });
+document.getElementById('zoomOut').addEventListener('click',   () => { scale = clamp(scale / 1.25, MIN_SCALE, MAX_SCALE); clampPan(); applyTransform(); });
+document.getElementById('zoomReset').addEventListener('click', () => { scale = 1; panX = 0; panY = 0; applyTransform(); });
+
+// ════════════════════════════════════════════════════
+// TOUCH GESTURE HANDLER (pinch-zoom + pan + drag)
+// ════════════════════════════════════════════════════
+let touches = {};          // active touch points by id
+let lastPinchDist = null;
+let lastPanMid    = null;
+let gestureMode   = null;  // 'drag' | 'gesture'
+
+function getTouchPos(touch) {
+  const r = canvas.getBoundingClientRect();
+  return {
+    x: (touch.clientX - r.left) / scale,
+    y: (touch.clientY - r.top)  / scale
+  };
+}
+
+function pinchDist(t1, t2) {
+  return Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+}
+function pinchMid(t1, t2) {
+  return { x: (t1.clientX + t2.clientX)/2, y: (t1.clientY + t2.clientY)/2 };
+}
+
+canvas.addEventListener('touchstart', e => {
+  e.preventDefault();
+  Array.from(e.changedTouches).forEach(t => { touches[t.identifier] = t; });
+  const ids = Object.keys(touches);
+
+  if (ids.length === 1) {
+    // Single touch — check for handle drag
+    const t = touches[ids[0]];
+    const pos = getTouchPos(t);
+    const hand = document.getElementById('handedness').value;
+    const hit = hitHandle(pos.x, pos.y, hand);
+    if (hit) {
+      dragging = hit;
+      gestureMode = 'drag';
+    } else {
+      gestureMode = 'pan';
+      lastPanMid = { x: t.clientX, y: t.clientY };
+    }
+  } else if (ids.length === 2) {
+    // Two fingers — pinch zoom
+    dragging = null;
+    gestureMode = 'gesture';
+    const ts = Object.values(touches);
+    lastPinchDist = pinchDist(ts[0], ts[1]);
+    lastPanMid    = pinchMid(ts[0], ts[1]);
+  }
+}, { passive: false });
+
+canvas.addEventListener('touchmove', e => {
+  e.preventDefault();
+  Array.from(e.changedTouches).forEach(t => { touches[t.identifier] = t; });
+  const ids = Object.keys(touches);
+
+  if (gestureMode === 'drag' && dragging && ids.length === 1) {
+    const t = touches[ids[0]];
+    const pos = getTouchPos(t);
+    const hand = document.getElementById('handedness').value;
+    applyDrag(pos.x, pos.y, hand);
+    update();
+
+  } else if (gestureMode === 'pan' && ids.length === 1) {
+    const t = touches[ids[0]];
+    const dx = t.clientX - lastPanMid.x;
+    const dy = t.clientY - lastPanMid.y;
+    panX += dx; panY += dy;
+    lastPanMid = { x: t.clientX, y: t.clientY };
+    clampPan(); applyTransform();
+
+  } else if (gestureMode === 'gesture' && ids.length >= 2) {
+    const ts = Object.values(touches);
+    const newDist = pinchDist(ts[0], ts[1]);
+    const newMid  = pinchMid(ts[0], ts[1]);
+
+    if (lastPinchDist) {
+      const ratio = newDist / lastPinchDist;
+      scale = clamp(scale * ratio, MIN_SCALE, MAX_SCALE);
+    }
+    if (lastPanMid) {
+      panX += newMid.x - lastPanMid.x;
+      panY += newMid.y - lastPanMid.y;
+    }
+    lastPinchDist = newDist;
+    lastPanMid    = newMid;
+    clampPan(); applyTransform();
+  }
+}, { passive: false });
+
+canvas.addEventListener('touchend', e => {
+  e.preventDefault();
+  Array.from(e.changedTouches).forEach(t => { delete touches[t.identifier]; });
+  const remaining = Object.keys(touches).length;
+  if (remaining === 0) {
+    dragging = null;
+    gestureMode = null;
+    lastPinchDist = null;
+    lastPanMid    = null;
+  } else if (remaining === 1) {
+    lastPinchDist = null;
+    gestureMode = 'pan';
+    const t = Object.values(touches)[0];
+    lastPanMid = { x: t.clientX, y: t.clientY };
+  }
+}, { passive: false });
+
+// Mouse wheel zoom
+document.getElementById('viewport').addEventListener('wheel', e => {
+  e.preventDefault();
+  const factor = e.deltaY < 0 ? 1.12 : 1/1.12;
+  scale = clamp(scale * factor, MIN_SCALE, MAX_SCALE);
+  clampPan(); applyTransform();
+}, { passive: false });
+
+// ════════════════════════════════════════════════════
+// PANEL TOGGLE
+// ════════════════════════════════════════════════════
+let panelOpen = true;
+function togglePanel() {
+  panelOpen = !panelOpen;
+  document.getElementById('sidebar').classList.toggle('hidden', !panelOpen);
+  document.getElementById('panel-toggle').classList.toggle('closed', !panelOpen);
+  document.getElementById('viewport').classList.toggle('expanded', !panelOpen);
+}
+
+// Auto-close panel on small screens
+if (window.innerWidth <= 600) { panelOpen = false; togglePanel(); }
+
+// ════════════════════════════════════════════════════
+// DRAWING HELPERS
+// ════════════════════════════════════════════════════
+function seg(x1,y1,x2,y2, color, w, dash) {
+  ctx.save();
+  ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2);
+  ctx.strokeStyle = color; ctx.lineWidth = w; ctx.lineCap = 'round';
+  if (dash) ctx.setLineDash(dash);
+  ctx.shadowColor = color; ctx.shadowBlur = 10;
+  ctx.stroke(); ctx.restore();
+}
+
+function drawHandle(x, y, color, label) {
+  ctx.save();
+  ctx.beginPath(); ctx.arc(x,y,14,0,Math.PI*2);
+  ctx.strokeStyle = color; ctx.lineWidth = 2.5;
+  ctx.shadowColor = color; ctx.shadowBlur = 22;
+  ctx.stroke();
+  ctx.beginPath(); ctx.arc(x,y,7,0,Math.PI*2);
+  ctx.fillStyle = color; ctx.fill();
+  ctx.fillStyle = color; ctx.font = 'bold 9px Orbitron,monospace';
+  ctx.textAlign = 'center'; ctx.shadowBlur = 8;
+  ctx.fillText(label, x, y - 20);
+  ctx.restore();
+}
+
+// ════════════════════════════════════════════════════
+// HIT TEST
+// ════════════════════════════════════════════════════
+function hitHandle(mx, my, hand) {
+  const pts = [
+    { key:'start', x: boardToX(handles.start.board, hand), y: ftToY(handles.start.ft) },
+    { key:'arrow', x: boardToX(handles.arrow.board, hand), y: ftToY(handles.arrow.ft) },
+    { key:'break', x: boardToX(handles.bp.board,    hand), y: ftToY(handles.bp.ft)    },
+  ];
+  for (const p of pts) {
+    if (Math.hypot(mx - p.x, my - p.y) < 22) return p.key;
+  }
+  return null;
+}
+
+function applyDrag(mx, my, hand) {
+  const board = clamp(xToBoard(mx, hand), 1, 39);
+  const ft    = (LANE_H - PADDING_BOTTOM - my) / PX_PER_FT;
+  if (dragging === 'start') {
+    handles.start.board = board; handles.start.ft = clamp(ft, -4, 4);
+    document.getElementById('startBoard').value = Math.round(board);
+    document.getElementById('v-start').innerText = Math.round(board);
+  } else if (dragging === 'arrow') {
+    handles.arrow.board = board; handles.arrow.ft = clamp(ft, 12, 30);
+    document.getElementById('arrowBoard').value = Math.round(board);
+    document.getElementById('v-arrow').innerText = Math.round(board);
+  } else if (dragging === 'break') {
+    handles.bp.board = board; handles.bp.ft = clamp(ft, 15, 62);
+    document.getElementById('breakBoard').value = Math.round(board);
+    document.getElementById('v-bb').innerText = Math.round(board);
+  }
+}
+
+// ════════════════════════════════════════════════════
+// MOUSE DRAG
+// ════════════════════════════════════════════════════
+canvas.addEventListener('mousedown', e => {
+  const r = canvas.getBoundingClientRect();
+  const mx = (e.clientX - r.left) / scale;
+  const my = (e.clientY - r.top)  / scale;
+  dragging = hitHandle(mx, my, document.getElementById('handedness').value);
+  if (dragging) canvas.style.cursor = 'grabbing';
+});
+window.addEventListener('mousemove', e => {
+  if (!dragging) return;
+  const r    = canvas.getBoundingClientRect();
+  const hand = document.getElementById('handedness').value;
+  const mx   = clamp((e.clientX - r.left) / scale, 0, LANE_W);
+  const my   = clamp((e.clientY - r.top)  / scale, 0, LANE_H);
+  applyDrag(mx, my, hand);
+  update();
+});
+window.addEventListener('mouseup', () => { dragging = null; canvas.style.cursor = 'crosshair'; });
+
+// ════════════════════════════════════════════════════
+// MAIN DRAW
+// ════════════════════════════════════════════════════
+function update() {
+  const hand      = document.getElementById('handedness').value;
+  const lockAngle = document.getElementById('lockAngle').value;
+  const L         = +document.getElementById('patternLen').value;
+  const BD        = +document.getElementById('breakDist').value;
+  const distModel = document.getElementById('distanceModel').value;
+  const BOARD_INCH = 1.06;
+
+  if (!dragging) {
+    handles.start.board = +document.getElementById('startBoard').value;
+    handles.arrow.board = +document.getElementById('arrowBoard').value;
+    if (lockAngle === 'none') handles.bp.board = +document.getElementById('breakBoard').value;
+  }
+
+  document.getElementById('v-start').innerText = Math.round(handles.start.board);
+  document.getElementById('v-arrow').innerText = Math.round(handles.arrow.board);
+  document.getElementById('v-pl').innerText    = L;
+  document.getElementById('v-bd').innerText    = BD;
+
+  const pocketB  = hand === 'right' ? 17.5 : 22.5;
+  const pocketFt = 63;
+  const pocketX  = boardToX(pocketB, hand), pocketY = ftToY(pocketFt);
+
+  let BB = handles.bp.board;
+  if (lockAngle !== 'none') {
+    const A = parseFloat(lockAngle) * Math.PI / 180;
+    const dist_ft = Math.max(0, pocketFt - handles.bp.ft);
+    const deltaBoards = (Math.tan(A) * (dist_ft * 12)) / BOARD_INCH;
+    BB = hand === 'right' ? pocketB - deltaBoards : pocketB + deltaBoards;
+  }
+  BB = clamp(BB, 1, 39);
+  document.getElementById('v-bb').innerText = Math.round(BB);
+  handles.bp.board = BB;
+
+  // ── CLEAR ──
+  ctx.clearRect(0,0,LANE_W,LANE_H);
+
+  // ── WOOD ──
+  const woodGrad = ctx.createLinearGradient(0,0,LANE_W,0);
+  woodGrad.addColorStop(0,    '#ddc878');
+  woodGrad.addColorStop(0.06, '#eed990');
+  woodGrad.addColorStop(0.18, '#f9eea8');
+  woodGrad.addColorStop(0.50, '#fef6c0');
+  woodGrad.addColorStop(0.82, '#f9eea8');
+  woodGrad.addColorStop(0.94, '#eed990');
+  woodGrad.addColorStop(1,    '#ddc878');
+  ctx.fillStyle = woodGrad;
+  ctx.fillRect(0,0,LANE_W,LANE_H);
+
+  // Board stripes
+  for (let i = 1; i <= BOARDS; i++) {
+    const x = i * BW, isGuide = i % 5 === 0;
+    ctx.strokeStyle = isGuide ? 'rgba(100,65,0,0.30)' : 'rgba(140,95,0,0.12)';
+    ctx.lineWidth   = isGuide ? 1.4 : 0.8;
+    ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,LANE_H); ctx.stroke();
+  }
+
+  // Gutters
+  [[0, 2*BW, true], [LANE_W-2*BW, LANE_W, false]].forEach(([x0,x1,l]) => {
+    const gg = ctx.createLinearGradient(x0,0,x1,0);
+    gg.addColorStop(l?0:1,'rgba(60,35,0,0.45)'); gg.addColorStop(l?1:0,'rgba(60,35,0,0)');
+    ctx.fillStyle = gg; ctx.fillRect(x0,0,x1-x0,LANE_H);
+  });
+
+  // ── OIL PATTERN ──
+  const oilTop = ftToY(L), oilBottom = ftToY(0);
+  const oilLeft = 3*BW, oilRight = 37*BW;
+  const oilGrad = ctx.createLinearGradient(oilLeft,0,oilRight,0);
+  oilGrad.addColorStop(0,    'rgba(160,210,255,0.0)');
+  oilGrad.addColorStop(0.12, 'rgba(160,210,255,0.22)');
+  oilGrad.addColorStop(0.40, 'rgba(190,235,255,0.34)');
+  oilGrad.addColorStop(0.50, 'rgba(210,250,255,0.40)');
+  oilGrad.addColorStop(0.60, 'rgba(190,235,255,0.34)');
+  oilGrad.addColorStop(0.88, 'rgba(160,210,255,0.22)');
+  oilGrad.addColorStop(1,    'rgba(160,210,255,0.0)');
+  ctx.fillStyle = oilGrad;
+  ctx.fillRect(oilLeft, oilTop, oilRight-oilLeft, oilBottom-oilTop);
+
+  // Oil edges
+  ctx.save();
+  ctx.strokeStyle = 'rgba(80,200,255,0.65)'; ctx.lineWidth = 1.5;
+  ctx.setLineDash([4,5]);
+  ctx.beginPath(); ctx.moveTo(oilLeft,oilTop);  ctx.lineTo(oilLeft,oilBottom);  ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(oilRight,oilTop); ctx.lineTo(oilRight,oilBottom); ctx.stroke();
+  ctx.restore();
+
+  // Oil ripple lines
+  ctx.save(); ctx.strokeStyle = 'rgba(150,225,255,0.14)'; ctx.lineWidth = 1; ctx.setLineDash([]);
+  for (let ft=5; ft<=L; ft+=5) { const ry=ftToY(ft); ctx.beginPath(); ctx.moveTo(oilLeft,ry); ctx.lineTo(oilRight,ry); ctx.stroke(); }
+  ctx.restore();
+
+  // ── FOUL LINE ──
+  const foulY = ftToY(0);
+  ctx.save();
+  ctx.strokeStyle = '#2d1200'; ctx.lineWidth = 4;
+  ctx.shadowColor = '#2d1200'; ctx.shadowBlur = 8;
+  ctx.beginPath(); ctx.moveTo(0,foulY); ctx.lineTo(LANE_W,foulY); ctx.stroke();
+  ctx.restore();
+
+  // ── APPROACH DOTS (7ft & 8ft) ──
+  const dotBoards = [];
+  [FT_DOTS1, FT_DOTS2].forEach(ft => {
+    const dy = ftToY(ft);
+    dotBoards.forEach(b => {
+      ctx.save(); ctx.beginPath(); ctx.arc(b*BW, dy, 4.5, 0, Math.PI*2);
+      ctx.fillStyle='#4a2e00'; ctx.shadowColor='rgba(155,0,255,0.5)'; ctx.shadowBlur=5; ctx.fill(); ctx.restore();
+    });
+  });
+
+  // ── RANGE FINDERS ──
+  [3,6].forEach(ft => {
+    const ry = ftToY(ft);
+    [5,10,30,35].forEach(b => {
+      ctx.save(); ctx.beginPath(); ctx.arc(b*BW, ry, 3, 0, Math.PI*2);
+      ctx.fillStyle='#6a4200'; ctx.fill(); ctx.restore();
+    });
+  });
+
+  // ── ARROWS ──
+  const arrowY = ftToY(FT_ARROWS);
+  const aw=7, ah=16;
+  ARROW_BOARDS.forEach(b => {
+    const ax = b*BW;
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(ax, arrowY - ah*0.62);
+    ctx.lineTo(ax-aw, arrowY + ah*0.38);
+    ctx.lineTo(ax+aw, arrowY + ah*0.38);
+    ctx.closePath();
+    ctx.fillStyle='#2d1200'; ctx.shadowColor='rgba(200,100,0,0.5)'; ctx.shadowBlur=6; ctx.fill();
+    ctx.fillStyle='#e8c060'; ctx.font='bold 7.5px Orbitron,monospace'; ctx.textAlign='center';
+    ctx.shadowColor='transparent'; ctx.fillText(b, ax, arrowY+ah*0.38+14);
+    ctx.restore();
+  });
+
+  // ── END-OF-PATTERN LINE ──
+  const eopY = ftToY(L);
+  ctx.save();
+  ctx.strokeStyle='rgba(80,200,255,0.75)'; ctx.lineWidth=2; ctx.setLineDash([5,5]);
+  ctx.shadowColor='rgba(80,200,255,0.8)'; ctx.shadowBlur=8;
+  ctx.beginPath(); ctx.moveTo(0,eopY); ctx.lineTo(LANE_W,eopY); ctx.stroke();
+  ctx.restore();
+
+  // ── PINS ──
+  const pins = pinLayout();
+  pins.forEach(p => {
+    ctx.save(); ctx.beginPath(); ctx.arc(p.x, p.y+4, PIN_R*0.9, 0, Math.PI*2);
+    ctx.fillStyle='rgba(0,0,0,0.22)'; ctx.fill(); ctx.restore();
+    ctx.save();
+    const pg = ctx.createRadialGradient(p.x-PIN_R*0.3, p.y-PIN_R*0.35, PIN_R*0.05, p.x, p.y, PIN_R);
+    pg.addColorStop(0,'#ffffff'); pg.addColorStop(0.4,'#f0e8ff'); pg.addColorStop(1,'#b890f0');
+    ctx.beginPath(); ctx.arc(p.x, p.y, PIN_R, 0, Math.PI*2);
+    ctx.fillStyle=pg; ctx.shadowColor='#9b00ff'; ctx.shadowBlur=18; ctx.fill();
+    ctx.strokeStyle='#5500aa'; ctx.lineWidth=2; ctx.shadowBlur=0; ctx.stroke();
+    const fs=Math.max(9,Math.round(PIN_R*0.95));
+    ctx.fillStyle='#2a0050'; ctx.font=`bold ${fs}px Orbitron,monospace`;
+    ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(p.n, p.x, p.y+1);
+    ctx.restore();
+  });
+
+  // Pocket marker
+  const pocketAbsX = (hand==='right'?17.5:22.5)*BW;
+  ctx.save(); ctx.beginPath(); ctx.arc(pocketAbsX, ftToY(FT_HEAD_PIN), 5, 0, Math.PI*2);
+  ctx.fillStyle='#ff4466'; ctx.shadowColor='#ff4466'; ctx.shadowBlur=16; ctx.fill(); ctx.restore();
+
+  // ── ANGLE GUIDES ──
+  let dist_ft = 0;
+  if (distModel==='EOP_60') dist_ft = 60-L;
+  if (distModel==='EOP_80') dist_ft = 80-L;
+  if (distModel==='BP')     dist_ft = Math.max(0, 60-BD);
+  const yModel = pocketY + dist_ft*PX_PER_FT;
+  const modelResults = [];
+  [[4,'show4'],[5,'show5'],[6,'show6']].forEach(([deg,id]) => {
+    if (!document.getElementById(id).checked) return;
+    const rad = deg*Math.PI/180;
+    const dBoards = (Math.tan(rad)*(dist_ft*12))/BOARD_INCH;
+    const gBoard  = hand==='right' ? pocketB-dBoards : pocketB+dBoards;
+    const gx = boardToX(gBoard, hand);
+    seg(pocketX, pocketY, gx, yModel, angleColors[deg], 2.5, [8,6]);
+    if (document.getElementById('showXs').checked) {
+      ctx.save(); ctx.fillStyle=angleColors[deg]; ctx.font='bold 16px sans-serif';
+      ctx.textAlign='center'; ctx.shadowColor=angleColors[deg]; ctx.shadowBlur=12;
+      ctx.fillText('×', gx, yModel-6); ctx.restore();
+    }
+    modelResults.push(`${deg}°→${gBoard.toFixed(1)}`);
+  });
+
+  // ── BALL PATH ──
+  const startX  = boardToX(handles.start.board, hand), startY  = ftToY(handles.start.ft);
+  const arrowXh = boardToX(handles.arrow.board, hand), arrowYh = ftToY(handles.arrow.ft);
+  const breakX  = boardToX(BB, hand),                  breakY  = ftToY(handles.bp.ft);
+
+  // Release line: white core + bright lime glow — makes it pop on wood
+  ctx.save();
+  ctx.beginPath(); ctx.moveTo(startX,startY); ctx.lineTo(arrowXh,arrowYh);
+  ctx.strokeStyle='#bb44ff'; ctx.lineWidth=8; ctx.lineCap='round';
+  ctx.shadowColor='#bb44ff'; ctx.shadowBlur=28;
+  ctx.stroke(); ctx.restore();
+  // white core on top
+  
+
+  // Hook: purple glow
+  ctx.save();
+  ctx.beginPath(); ctx.moveTo(arrowXh,arrowYh); ctx.lineTo(breakX,breakY);
+  ctx.strokeStyle='#bb44ff'; ctx.lineWidth=7; ctx.lineCap='round';
+  ctx.shadowColor='#bb44ff'; ctx.shadowBlur=22; ctx.stroke(); ctx.restore();
+
+  // Entry: orange glow
+  ctx.save();
+  ctx.beginPath(); ctx.moveTo(breakX,breakY); ctx.lineTo(pocketX,pocketY);
+  ctx.strokeStyle='#ff9900'; ctx.lineWidth=7; ctx.lineCap='round';
+  ctx.shadowColor='#ff9900'; ctx.shadowBlur=22; ctx.stroke(); ctx.restore();
+
+  // Handles
+  drawHandle(startX, startY, '#bb44ff', 'START');
+  drawHandle(arrowXh, arrowYh, '#bb44ff', 'ARROW');
+  drawHandle(breakX, breakY, '#bb44ff', 'BREAK');
+
+  // ── STATS ──
+  const pl31 = clamp(L-31, 1, 39);
+  const entryDeg = Math.abs(Math.atan2(breakX-pocketX, breakY-pocketY)*180/Math.PI);
+  document.getElementById('entryDeg').innerText = entryDeg.toFixed(1)+'°';
+  const target = lockAngle==='none' ? null : parseFloat(lockAngle);
+  document.getElementById('deltaDeg').innerText = target ? Math.abs(entryDeg-target).toFixed(1)+'°' : '—';
+  document.getElementById('pl31').innerText = `Board ${pl31.toFixed(1)} (~exit)`;
+  document.getElementById('modelBoards').innerText = modelResults.join('  |  ') || '—';
+}
+
+// ── SLIDERS ──
+['handedness','lockAngle','patternLen','breakDist','breakBoard','distanceModel',
+ 'show4','show5','show6','showXs','startBoard','arrowBoard'].forEach(id => {
+  document.getElementById(id).addEventListener('input', () => {
+    handles.start.board = +document.getElementById('startBoard').value;
+    handles.arrow.board = +document.getElementById('arrowBoard').value;
+    if (document.getElementById('lockAngle').value === 'none') {
+      handles.bp.board = +document.getElementById('breakBoard').value;
+    }
+    update();
+  });
+});
+
+// Fade drag hint
+setTimeout(() => {
+  const h = document.getElementById('drag-hint');
+  if (h) { h.style.opacity='0'; setTimeout(()=>h.style.display='none',1100); }
+}, 6000);
+
+update();
+</script>
+</body>
+</html>
